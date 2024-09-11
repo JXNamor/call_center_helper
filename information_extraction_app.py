@@ -222,7 +222,7 @@ class App:
         self.ax.clear()  # Clear the previous graph
 
         metrics = ['Problem solved', 'Customer greeting', 'Agent knowledge', 'Agent solving skills',
-                'Customer complaints', 'Agent\'s tone', 'Agent\'s engagement', 'Agent sentiment score', 'Agent\'s charisma']
+                'Customer complaints', 'Agent\'s engagement', 'Agent sentiment score']
 
         for metric in metrics:
             if self.metric_vars[metric].get():  # Only plot the metric if its checkbox is selected
