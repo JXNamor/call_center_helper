@@ -61,7 +61,7 @@ def extract_key_information(text):
 def post_call_summary(text):
     messages = [
         {"role": "system", "content": "You are an assistant that evaluate how a call operator handled a client."},
-        {"role": "user", "content": f"Evaluate how well the call operator handled a client using this transcript of a phone call. The information needed is : 'Problem solved : x/100\nCustomer greeting : x/100\nAgent knowledge : x/100\nAgent solving skills : x/100\nCustomer complaints : x/100\nAgent's tone : x/100\nAgent's engagement : x/100\nAgent sentiment score : x/100\nAgent's charisma : x/100\nTalking pace estimation: x WPM'. You should rate all of these points out of 100 and then make a briefing about the points that should be improved and what was done nicely, along with a word per minute estimation for the agent (the length of the call is given at the end). For each rating that wasn't 100, explain what could be improved in order to make that a 100. You also need to add a confidence rate out of 100 of how much you are confident in these notations. \n{text}"}
+        {"role": "user", "content": f"Evaluate how well the call operator handled a client using this transcript of a phone call. The information needed is : 'Problem solved : x/100\nCustomer greeting : x/100\nAgent knowledge : x/100\nAgent solving skills : x/100\nCustomer complaints : x/100\nAgent's engagement : x/100\nAgent sentiment score : x/100\nTalking pace estimation: x WPM'. You should rate all of these points out of 100 and then make a briefing about the points that should be improved and what was done nicely, along with a word per minute estimation for the agent (the length of the call is given at the end). For each rating that wasn't 100, explain what could be improved in order to make that a 100. You also need to add a confidence rate out of 100 of how much you are confident in these notations. \n{text}"}
     ]
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
@@ -191,7 +191,7 @@ class App:
 
         # Define metrics
         metrics = ['Problem solved', 'Customer greeting', 'Agent knowledge', 'Agent solving skills',
-                'Customer complaints', 'Agent\'s tone', 'Agent\'s engagement', 'Agent sentiment score', 'Agent\'s charisma']
+                'Customer complaints', 'Agent\'s engagement', 'Agent sentiment score']
 
         # Dictionary to hold checkbox variables
         self.metric_vars = {}
