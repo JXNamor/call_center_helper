@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 from queue import Queue
 from time import sleep
 from openai_key import OPENAI_API_KEY
+import json
+
 
 def install(package):
     subprocess.check_call([sys.executable, "-m", "pip", "install", package])
@@ -32,6 +34,11 @@ try:
     import torch
 except ImportError:
     install("torch")
+try:
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+except ImportError:
+    install("matplotlib")
 
 
 # Initialize OpenAI API
@@ -40,7 +47,7 @@ openai.api_key = OPENAI_API_KEY
 def extract_key_information(text):
     messages = [
         {"role": "system", "content": "You are an assistant that extracts key information from text."},
-        {"role": "user", "content": f"Extract all key information from this transcription of a phone call between a client and a call operator. The first paragraph is the information that has already been extracted. Only extract new key elements about the customer to help the call operator and update the elements using the new information. Do not drastically change the output, keep it similar to what was already used in the first paragraph. Use small phrases or only words:\n{text}"}
+        {"role": "user", "content": f"Extract all key information from this transcription of a phone call between a client and a call operator. The first paragraph is the information that has already been extracted. Only extract new key elements about the customer to help the call operator and update the elements using the new information. The output should respect this format :\n 'Client first name : Unknown\nClient last name : Unknown\nClient number : Unknown\nClient phone number : Unknown\nClient email : Unknown\nClient date of birth : Unknown\nReason for client's call : Unknown\n'. Fill the missing information. Use small phrases or only words:\n{text}"}
     ]
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
@@ -53,12 +60,12 @@ def extract_key_information(text):
 def post_call_summary(text):
     messages = [
         {"role": "system", "content": "You are an assistant that evaluate how a call operator handled a client."},
-        {"role": "user", "content": f"Evaluate how well the call operator handled a client using this transcript of a phone call. The information needed is : was the problem solved (answer with yes/no/partly), how well was the customer greeted, was the agent knowledgeable, were the agent solving skills useful, were there customer complaints, was the agent's tone apropriate. You should rate all of these points out of 10 and then make a briefing about the points that should be improved and what was done nicely. For each rating that wasn't 10, explain what could be improved in order to make that a 10. You also need to add a confidence rate out of 10 of how much you are confident in these notations. \n{text}"}
+        {"role": "user", "content": f"Evaluate how well the call operator handled a client using this transcript of a phone call. The information needed is : 'Problem solved : x/100\nCustomer greeting : x/100\nAgent knowledge : x/100\nAgent solving skills : x/100\nCustomer complaints : x/100\nAgent's tone : x/100\nAgent's engagement : x/100\nAgent sentiment score : x/100\nAgent's charisma : x/100\nTalking pace estimation: x WPM'. You should rate all of these points out of 100 and then make a briefing about the points that should be improved and what was done nicely, along with a word per minute estimation for the agent (the length of the call is given at the end). For each rating that wasn't 100, explain what could be improved in order to make that a 100. You also need to add a confidence rate out of 100 of how much you are confident in these notations. \n{text}"}
     ]
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=messages,
-        max_tokens=200,
+        max_tokens=500,
         temperature=0.5
     )
     return response.choices[0].message['content'].strip()
@@ -98,7 +105,7 @@ class App:
 
         ttk.Label(self.parameters_frame, text="Device to listen to:").grid(row=4, column=0, sticky=tk.W)
         self.device_entry = ttk.Entry(self.parameters_frame)
-        self.device_entry.insert(0, "Line 1 (Virtual Audio Cable)")
+        self.device_entry.insert(0, "CABLE Output")
         self.device_entry.grid(row=4, column=1)
 
         self.start_button = ttk.Button(self.parameters_frame, text="Start", command=self.start)
@@ -107,8 +114,16 @@ class App:
         self.stop_button = ttk.Button(self.parameters_frame, text="Stop", command=self.stop)
         self.stop_button.grid(row=5, column=1, padx=5, pady=5)
 
+        self.show_graph_button = ttk.Button(self.parameters_frame, text="Show Graph", command=self.show_graph)
+        self.show_graph_button.grid(row=5, column=2, padx=5, pady=5)
+
         self.quit_button = ttk.Button(self.parameters_frame, text="Quit", command=self.quit)
-        self.quit_button.grid(row=5, column=2, columnspan=2, pady=10)
+        self.quit_button.grid(row=6, column=0, columnspan=1, pady=5)
+
+        self.ratings_data = []
+        self.load_ratings_data()
+
+        self.graph_window = None
 
         # Output frame
         self.output_frame = ttk.Frame(root, padding="20", style="TFrame")
@@ -123,6 +138,100 @@ class App:
 
         # Threading setup
         self.stop_thread_flag = threading.Event()
+
+    def load_ratings_data(self):
+        try:
+            with open("C:/Users/trocm/Documents/projects/speech_detection/ratings_data.json", "r") as f:
+                content = f.read()
+                if content.strip():  # Check if the file is not empty
+                    self.ratings_data = json.loads(content)
+                else:
+                    self.ratings_data = []
+        except (FileNotFoundError, json.JSONDecodeError):
+            self.ratings_data = []
+
+    def save_ratings_data(self):
+        with open("C:/Users/trocm/Documents/projects/speech_detection/ratings_data.json", "w") as f:
+            json.dump(self.ratings_data, f)
+
+    def extract_ratings(self, summary_text):
+        ratings = {}
+        for line in summary_text.split('\n'):
+            if ":" in line:
+                key, value = line.split(':')
+                value = value.strip()
+                if "- " in key:
+                    key = key.split(': ')[0].strip()
+                try:
+                    if '/' in value:
+                        value = value.split('/')[0].strip()
+                    ratings[key.strip()] = int(value)
+                except ValueError:
+                    if "WPM" in value:
+                        ratings[key.strip()] = value
+                    else:
+                        ratings[key.strip()] = None
+        return ratings
+    
+    def show_graph(self):
+        self.graph_window = tk.Toplevel(self.root)
+        self.graph_window.title("Ratings Evolution")
+
+        # Create a frame for checkboxes and the graph
+        checkbox_frame = ttk.Frame(self.graph_window)
+        checkbox_frame.pack(side=tk.LEFT, fill=tk.Y, padx=10)
+
+        graph_frame = ttk.Frame(self.graph_window)
+        graph_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        # Define metrics
+        metrics = ['Problem solved', 'Customer greeting', 'Agent knowledge', 'Agent solving skills',
+                'Customer complaints', 'Agent\'s tone', 'Agent\'s engagement', 'Agent sentiment score', 'Agent\'s charisma']
+
+        # Dictionary to hold checkbox variables
+        self.metric_vars = {}
+        
+        # Create a checkbox for each metric
+        for metric in metrics:
+            var = tk.BooleanVar(value=True)  # By default, all checkboxes are checked
+            checkbox = ttk.Checkbutton(checkbox_frame, text=metric, variable=var)
+            checkbox.pack(anchor=tk.W)
+            self.metric_vars[metric] = var
+
+        # Button to refresh the graph based on selected metrics
+        refresh_button = ttk.Button(checkbox_frame, text="Show Selected", command=self.update_graph)
+        refresh_button.pack(pady=10)
+
+        # Set up the initial graph
+        self.fig, self.ax = plt.subplots(figsize=(8, 6))
+
+        # Create a canvas to embed the graph in the window
+        self.canvas = FigureCanvasTkAgg(self.fig, master=graph_frame)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+        # Initially display the graph with all metrics selected
+        self.update_graph()
+
+    def update_graph(self):
+        """Update the graph based on selected metrics."""
+        self.ax.clear()  # Clear the previous graph
+
+        metrics = ['Problem solved', 'Customer greeting', 'Agent knowledge', 'Agent solving skills',
+                'Customer complaints', 'Agent\'s tone', 'Agent\'s engagement', 'Agent sentiment score', 'Agent\'s charisma']
+
+        for metric in metrics:
+            if self.metric_vars[metric].get():  # Only plot the metric if its checkbox is selected
+                values = [call.get(metric) for call in self.ratings_data if metric in call]
+                if values:
+                    self.ax.plot(range(1, len(values) + 1), values, label=metric)
+
+        self.ax.set_xlabel('Call Number')
+        self.ax.set_ylabel('Ratings')
+        self.ax.set_title('Operator Behavior Metrics Evolution')
+        self.ax.legend()
+
+        # Redraw the canvas with the updated graph
+        self.canvas.draw()
 
     def start(self):
         self.stop_thread_flag.clear()
@@ -154,6 +263,7 @@ class App:
 
         mic_index = None
         for index, name in enumerate(sr.Microphone.list_microphone_names()):
+            print(f"microphone name : {name} associated with index {index}")
             if device in name:
                 mic_index = index
                 break
@@ -182,6 +292,7 @@ class App:
 
         self.transcription_text.insert(tk.END, "\nListening...")
         key_info = ""
+        start = datetime.utcnow()
         while not self.stop_thread_flag.is_set():
             now = datetime.utcnow()
 
@@ -216,13 +327,21 @@ class App:
                     transcription[-1] = text
 
                 sleep(0.25)
-
+        end = datetime.utcnow()
         self.transcription_text.insert(tk.END, "\n\nTranscription Ended")
         self.summary_text.delete('1.0', tk.END)
         self.summary_text.insert(tk.END, key_info)
         self.summary_text.insert(tk.END, "\n\nSummary Ended. Here is the post call update :\n")
-        call_summary = post_call_summary(full_text)
+        call_time = end - start
+        text_for_summary = full_text + "\n" + str(call_time)
+        call_summary = post_call_summary(text_for_summary)
         self.summary_text.insert(tk.END, call_summary)
+
+        ratings = self.extract_ratings(call_summary)
+        self.ratings_data.append(ratings)
+        self.save_ratings_data()
+
+    
 
 if __name__ == "__main__":
     root = tk.Tk()
