@@ -8,6 +8,7 @@ from queue import Queue
 from time import sleep
 from openai_key import OPENAI_API_KEY
 import json
+import os
 
 
 def install(package):
@@ -140,8 +141,10 @@ class App:
         self.stop_thread_flag = threading.Event()
 
     def load_ratings_data(self):
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        file_path = os.path.join(script_dir, "ratings_data.json")
         try:
-            with open("C:/Users/trocm/Documents/projects/speech_detection/ratings_data.json", "r") as f:
+            with open(file_path, "r") as f:
                 content = f.read()
                 if content.strip():  # Check if the file is not empty
                     self.ratings_data = json.loads(content)
@@ -151,7 +154,9 @@ class App:
             self.ratings_data = []
 
     def save_ratings_data(self):
-        with open("C:/Users/trocm/Documents/projects/speech_detection/ratings_data.json", "w") as f:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        file_path = os.path.join(script_dir, "ratings_data.json")
+        with open(file_path, "w") as f:
             json.dump(self.ratings_data, f)
 
     def extract_ratings(self, summary_text):
